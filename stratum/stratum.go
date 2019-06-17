@@ -4,6 +4,7 @@ package stratum
 
 import (
 	"bufio"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/gertjaap/nicehashmonitor/logging"
 	"github.com/gertjaap/nicehashmonitor/util"
+	"github.com/mit-dci/lit/btcutil/base58"
 )
 
 // ErrStratumStaleWork indicates that the work to send to the pool was stale.
@@ -145,20 +147,24 @@ func sliceRemove(s []uint64, e uint64) []uint64 {
 	return s
 }
 
+func generateDummyAddress() string {
+	randomHash := make([]byte, 20)
+	rand.Read(randomHash)
+	return base58.CheckEncode(randomHash, 0x05)
+}
+
 // StratumConn starts the initial connection to a stratum pool and sets defaults
 // in the pool object.
-func StratumConn(pool, user, pass string, workChan chan NotifyWork) (*Stratum, error) {
+func StratumConn(pool string, workChan chan NotifyWork) (*Stratum, error) {
 	var stratum Stratum
-	stratum.cfg.User = user
-	stratum.cfg.Pass = pass
+	stratum.cfg.User = generateDummyAddress()
+	stratum.cfg.Pass = "x"
 
 	proto := "stratum+tcp://"
-	if strings.HasPrefix(pool, proto) {
-		pool = strings.Replace(pool, proto, "", 1)
-	} else {
-		err := errors.New("Only stratum pools supported.")
-		return nil, err
-	}
+	pool = strings.Replace(pool, proto, "", 1)
+
+	logging.Infof("Connecting to %s as %s\n", pool, stratum.cfg.User)
+
 	var conn net.Conn
 	var err error
 	conn, err = net.Dial("tcp", pool)
@@ -203,6 +209,9 @@ func StratumConn(pool, user, pass string, workChan chan NotifyWork) (*Stratum, e
 func (s *Stratum) Reconnect() error {
 	var conn net.Conn
 	var err error
+
+	s.cfg.User = generateDummyAddress()
+
 	conn, err = net.Dial("tcp", s.cfg.Pool)
 	if err != nil {
 		return err

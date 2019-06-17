@@ -54,7 +54,7 @@ func main() {
 			for _, loc := range locations {
 				time.Sleep(time.Second * 1)
 				server := fmt.Sprintf("stratum+tcp://%s.%s.nicehash.com:%d", algo, loc, port)
-				_, err := stratum.StratumConn(server, "3EFz9biNEWwUAUbfkuJdYfBQi6i6ZbGEB8", "x", getWorkChan)
+				_, err := stratum.StratumConn(server, getWorkChan)
 				if err != nil {
 					logging.Fatal(err)
 				}
