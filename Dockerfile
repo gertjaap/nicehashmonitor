@@ -7,6 +7,7 @@ RUN go get github.com/gertjaap/nicehashmonitor
 RUN rm -rf /usr/local/go/src/github.com/gertjaap/nicehashmonitor
 COPY . /usr/local/go/src/github.com/gertjaap/nicehashmonitor
 WORKDIR /usr/local/go/src/github.com/gertjaap/nicehashmonitor
+RUN go get ./...
 RUN go build
 
 FROM alpine
