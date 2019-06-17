@@ -17,15 +17,20 @@ import (
 )
 
 var db *buntdb.DB
+var servers []*stratum.Stratum
 
 func main() {
 	var err error
 	logging.SetLogLevel(int(logging.LogLevelDebug))
-
+	servers = []*stratum.Stratum{}
 	getWorkChan := make(chan stratum.NotifyWork, 100)
+
+	/*algorithms := []string{"lyra2rev3"}
+	ports := []int{3373}*/
 
 	algorithms := []string{"scrypt", "sha256", "scryptnf", "x11", "x13", "keccak", "x15", "nist5", "neoscrypt", "lyra2re", "whirlpoolx", "qubit", "quark", "axiom", "lyra2rev2", "scryptjanenf16", "blake256r8", "blake256r14", "blake256r8vnl", "hodl", "daggerhashimoto", "decred", "cryptonight", "lbry", "equihash", "pascal", "x11gost", "sia", "blake2s", "skunk", "cryptonightv7", "cryptonightheavy", "lyra2z", "x16r", "cryptonightv8", "sha256asicboost", "zhash", "beam", "grincuckaroo29", "grincuckatoo31", "lyra2rev3", "mtp", "cryptonightr", "cuckoocycle"}
 	ports := []int{3333, 3334, 3335, 3336, 3337, 3338, 3339, 3340, 3341, 3342, 3343, 3344, 3345, 3346, 3347, 3348, 3349, 3350, 3351, 3352, 3353, 3354, 3355, 3356, 3357, 3358, 3359, 3360, 3361, 3362, 3363, 3364, 3365, 3366, 3367, 3368, 3369, 3370, 3371, 3372, 3373, 3374, 3375, 3376}
+
 	locations := []string{"eu" /*, "usa", "hk", "jp", "in", "br"*/}
 
 	db, err = buntdb.Open("/data/data.db")
@@ -49,15 +54,25 @@ func main() {
 	}()
 
 	go func() {
+		for {
+			time.Sleep(time.Second * 60)
+			for _, s := range servers {
+				s.Reconnect()
+			}
+		}
+	}()
+
+	go func() {
 		for i, algo := range algorithms {
 			port := ports[i]
 			for _, loc := range locations {
 				time.Sleep(time.Second * 1)
 				server := fmt.Sprintf("stratum+tcp://%s.%s.nicehash.com:%d", algo, loc, port)
-				_, err := stratum.StratumConn(server, getWorkChan)
+				s, err := stratum.StratumConn(server, getWorkChan)
 				if err != nil {
 					logging.Fatal(err)
 				}
+				servers = append(servers, s)
 			}
 		}
 	}()

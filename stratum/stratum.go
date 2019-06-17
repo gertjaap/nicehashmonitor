@@ -171,6 +171,8 @@ func StratumConn(pool string, workChan chan NotifyWork) (*Stratum, error) {
 	if err != nil {
 		return nil, err
 	}
+	logging.Infof("Connected to %s\n", pool)
+
 	stratum.ID = 1
 	stratum.Conn = conn
 	stratum.cfg.Pool = pool
@@ -189,10 +191,12 @@ func StratumConn(pool string, workChan chan NotifyWork) (*Stratum, error) {
 	stratum.Reader = bufio.NewReader(stratum.Conn)
 	go stratum.Listen()
 
+	logging.Infof("Subscribing to %s\n", pool)
 	err = stratum.Subscribe()
 	if err != nil {
 		return nil, err
 	}
+	logging.Infof("Authorizing on %s\n", pool)
 	err = stratum.Auth()
 	if err != nil {
 		return nil, err
@@ -210,7 +214,11 @@ func (s *Stratum) Reconnect() error {
 	var conn net.Conn
 	var err error
 
+	s.Conn.Close()
+
 	s.cfg.User = generateDummyAddress()
+
+	logging.Infof("Reconnecting to %s as %s\n", s.cfg.Pool, s.cfg.User)
 
 	conn, err = net.Dial("tcp", s.cfg.Pool)
 	if err != nil {
@@ -222,8 +230,6 @@ func (s *Stratum) Reconnect() error {
 	if err != nil {
 		return nil
 	}
-	// Should NOT need this.
-	time.Sleep(5 * time.Second)
 	// XXX Do I really need to re-auth here?
 	err = s.Auth()
 	if err != nil {
@@ -233,6 +239,8 @@ func (s *Stratum) Reconnect() error {
 	// If we were able to reconnect, restart counter
 	s.Started = uint32(time.Now().Unix())
 
+	go s.Listen()
+
 	return nil
 }
 
@@ -240,21 +248,21 @@ func (s *Stratum) Reconnect() error {
 func (s *Stratum) Listen() {
 
 	for {
+		logging.Infof("Reading from reader for [%s]\n", s.cfg.Pool)
 		result, err := s.Reader.ReadString('\n')
 		if err != nil {
+			logging.Errorf("[%s] Error reading from transport : %s\n", s.cfg.Pool, err.Error())
 			if err == io.EOF {
-				time.Sleep(time.Second * 60)
-				err = s.Reconnect()
 				for err != nil {
 					time.Sleep(time.Second * 60)
 					err = s.Reconnect()
 				}
-
-			} else {
-				logging.Error(err)
 			}
-			continue
+			s.Conn.Close()
+			return
 		}
+
+		logging.Infof("Received [%s]\n", result)
 
 		resp, err := s.Unmarshal([]byte(result))
 		if err != nil {
@@ -755,4 +763,37 @@ func (s *Stratum) Unmarshal(blob []byte) (interface{}, error) {
 		}
 		return resp, nil
 	}
+}
+
+// PrepSubmit formats a mining.sumbit message from the solved work.
+func (s *Stratum) SubmitDummyWork() error {
+
+	sub := Submit{}
+	sub.Method = "mining.submit"
+
+	// Format data to send off.
+	s.ID++
+	sub.ID = s.ID
+	s.submitIDs = append(s.submitIDs, s.ID)
+
+	timestampStr := fmt.Sprintf("%08x", time.Now().Unix())
+	nonceStr := fmt.Sprintf("%08x", 5)
+	xnonceStr := fmt.Sprintf("%08x", 398267)
+
+	sub.Params = []string{s.cfg.User, s.PoolWork.JobID, xnonceStr, timestampStr,
+		nonceStr}
+
+	m, err := json.Marshal(sub)
+	if err != nil {
+		return err
+	}
+	_, err = s.Conn.Write(m)
+	if err != nil {
+		return err
+	}
+	_, err = s.Conn.Write([]byte("\n"))
+	if err != nil {
+		return err
+	}
+	return nil
 }
